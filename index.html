@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DAMARES GILA — Virtual Trading</title>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#151d32;--line:#27334d;--muted:#9eabc4;--green:#20c997;--red:#ff6377;--gold:#f4c76b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#eef3ff;font:15px system-ui,Arial}header{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}h1{font-size:20px;margin:0;color:var(--gold)}.wrap{max-width:1100px;margin:auto;padding:16px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:14px}.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.muted{color:var(--muted);font-size:13px}.price{font-size:30px;font-weight:800}.balance{color:var(--gold);font-weight:800}.btn{border:0;border-radius:9px;padding:11px 14px;font-weight:700;color:white;background:#43516e;cursor:pointer}.buy{background:#078b68}.sell{background:#c43d55}.primary{background:#7656d9}.danger{background:#9b3547}input,select{background:#0e1528;color:white;border:1px solid var(--line);border-radius:8px;padding:11px;min-width:0;width:100%}label{display:block;font-size:13px;color:var(--muted);margin:9px 0 5px}.form{max-width:420px;margin:30px auto}.hidden{display:none!important}#chart{height:340px}.item{padding:10px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:center}.positive{color:var(--green)}.negative{color:var(--red)}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}small{color:var(--muted)}@media(max-width:760px){.grid{grid-template-columns:1fr}#chart{height:280px}.wrap{padding:10px}.price{font-size:25px}}
+</style></head><body>
+<header><h1>🔥 DAMARES GILA</h1><div id="userbar" class="hidden">Halo, <b id="uname"></b> · <span class="balance" id="balanceTop"></span> BRAY <button class="btn" onclick="logout()">Keluar</button></div></header>
+<main class="wrap">
+<section id="auth" class="panel form"><h2>Masuk ke DAMARES GILA</h2><p class="muted">Buat akun atau login untuk bermain.</p>
+<div class="tabs"><button class="btn primary" onclick="authMode='login';authTitle()">Login</button><button class="btn" onclick="authMode='register';authTitle()">Daftar</button></div>
+<h3 id="authHeading">Login pemain</h3><label>Username</label><input id="username" autocomplete="username" placeholder="3–18 karakter">
+<label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Minimal 8 karakter">
+<button class="btn primary" style="width:100%;margin-top:14px" onclick="submitAuth()">Lanjutkan</button><p id="authMsg" class="muted"></p></section>
+<section id="game" class="hidden">
+<div class="grid"><div>
+<div class="panel"><div class="muted">MARKET BERSAMA · DAMARES GILA</div><div class="row" style="justify-content:space-between"><div class="price" id="price">—</div><span class="muted" id="marketState">Menghubungkan…</span></div><div id="chart"></div><small>Grafik simulasi. Pergerakan dikendalikan admin.</small></div>
+<div class="panel"><h3>Trading</h3><label>Lot</label><input id="lot" type="number" min=".01" max="100" step=".01" value="0.10">
+<div class="row" style="margin-top:12px"><button class="btn buy" style="flex:1" onclick="openTrade('BUY')">BUY</button><button class="btn sell" style="flex:1" onclick="openTrade('SELL')">SELL</button></div><p class="muted">Posisi dapat ditutup kapan saja. Profit/rugi langsung masuk ke saldo saat posisi ditutup.</p></div>
+</div><div>
+<div class="panel"><h3>Akun pemain</h3><div class="muted">Saldo virtual</div><div class="price balance" id="balance">10.000 BRAY</div><div class="muted">Poin simulasi, bukan uang atau investasi.</div></div>
+<div class="panel"><h3>Posisi terbuka</h3><div id="positions" class="muted">Belum ada posisi.</div></div>
+<div class="panel"><h3>Penukaran hadiah</h3><p class="muted">Penukaran diperiksa admin. Tidak ada pembelian atau deposit poin.</p>
+<button class="btn" style="width:100%;margin:4px 0" onclick="redeem('dana500')">100.000 BRAY → DANA Rp500</button>
+<button class="btn" style="width:100%;margin:4px 0" onclick="redeem('dana1000')">200.000 BRAY → DANA Rp1.000</button>
+<button class="btn" style="width:100%;margin:4px 0" onclick="redeem('shirt')">1.000.000 BRAY → T-shirt</button><div id="shopMsg" class="muted"></div></div>
+</div></div>
+<div class="panel"><h3>Riwayat transaksi</h3><div id="history" class="muted">Belum ada transaksi.</div></div>
+</section>
+<p class="muted" style="text-align:center">DAMARES GILA adalah permainan simulasi. Harga dibuat dan dikendalikan admin, bukan harga pasar sungguhan. Poin BRAY tidak dapat dibeli atau diuangkan kecuali melalui hadiah yang dinyatakan di atas.</p>
+</main>
+<script>
+let authMode="login",socket,chart,candleSeries,marketPrice=1000;
+const $=id=>document.getElementById(id);
+async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{"Content-Type":"application/json",...(opts.headers||{})}});const d=await r.json();if(!r.ok)throw Error(d.error||"Terjadi kesalahan");return d}
+function authTitle(){$("authHeading").textContent=authMode==="login"?"Login pemain":"Daftar akun baru";$("authMsg").textContent=""}
+async function submitAuth(){try{const d=await api("/api/auth/"+authMode,{method:"POST",body:JSON.stringify({username:$("username").value.trim(),password:$("password").value})});showGame(d.user)}catch(e){$("authMsg").textContent=e.message}}
+async function logout(){await api("/api/auth/logout",{method:"POST"});location.reload()}
+async function boot(){try{const d=await api("/api/me");showGame(d.user)}catch(e){}}
+function showGame(u){$("auth").classList.add("hidden");$("game").classList.remove("hidden");$("userbar").classList.remove("hidden");$("uname").textContent=u.username;updateBalance(u.balance);startChart();refreshPortfolio();connectMarket()}
+function updateBalance(v){$("balance").textContent=Number(v).toLocaleString("id-ID",{maximumFractionDigits:2})+" BRAY";$("balanceTop").textContent=Number(v).toLocaleString("id-ID",{maximumFractionDigits:2})}
+function startChart(){chart=LightweightCharts.createChart($("chart"),{layout:{background:{color:"#151d32"},textColor:"#aab6ce"},grid:{vertLines:{color:"#25314a"},horzLines:{color:"#25314a"}},rightPriceScale:{borderColor:"#34415c"},timeScale:{borderColor:"#34415c",timeVisible:true},width:$("chart").clientWidth,height:$("chart").clientHeight});candleSeries=chart.addCandlestickSeries({upColor:"#20c997",downColor:"#ff6377",borderUpColor:"#20c997",borderDownColor:"#ff6377",wickUpColor:"#20c997",wickDownColor:"#ff6377"});window.addEventListener("resize",()=>chart.applyOptions({width:$("chart").clientWidth}));api("/api/market").then(d=>{if(d.candles.length)candleSeries.setData(d.candles)})}
+function connectMarket(){socket=io();socket.on("market",m=>{marketPrice=m.price;$("price").textContent=Number(m.price).toFixed(2);$("marketState").textContent=m.paused?"DIJEDA ADMIN":`Arah: ${m.direction} · Kecepatan ${m.speed}x`;const t=Math.floor(Date.now()/60000)*60;const c={time:t,open:m.price,high:m.price,low:m.price,close:m.price};try{candleSeries.update(c)}catch(e){}})}
+async function openTrade(side){try{const d=await api("/api/trade/open",{method:"POST",body:JSON.stringify({side,lot:Number($("lot").value)})});alert(`${side} dibuka pada ${d.price}`);refreshPortfolio()}catch(e){alert(e.message)}}
+async function closeTrade(id){try{const d=await api("/api/trade/close",{method:"POST",body:JSON.stringify({id})});alert(`Posisi ditutup. P/L: ${d.pnl.toFixed(2)} BRAY`);refreshPortfolio()}catch(e){alert(e.message)}}
+async function refreshPortfolio(){try{const d=await api("/api/portfolio");updateBalance(d.user.balance);$("positions").innerHTML=d.positions.length?d.positions.map(p=>`<div class="item"><div><b class="${p.side==="BUY"?"positive":"negative"}">${p.side}</b> ${p.lot} lot<br><small>Entry ${Number(p.entry_price).toFixed(2)}</small></div><button class="btn danger" onclick="closeTrade(${p.id})">Tutup</button></div>`).join(""):"Belum ada posisi."; $("history").innerHTML=d.history.length?d.history.map(p=>`<div class="item"><span>${p.side} · ${p.lot} lot<br><small>${p.created_at}</small></span><b class="${p.pnl>=0?"positive":"negative"}">${p.pnl>=0?"+":""}${Number(p.pnl).toFixed(2)} BRAY</b></div>`).join(""):"Belum ada transaksi."}catch(e){}}
+async function redeem(reward){if(!confirm("Ajukan penukaran hadiah? Poin akan dipotong sementara sampai permintaan diproses."))return;try{const d=await api("/api/shop/redeem",{method:"POST",body:JSON.stringify({reward})});$("shopMsg").innerHTML=`Permintaan #${d.id} dibuat. <a target="_blank" rel="noopener" href="${d.whatsapp}" style="color:#f4c76b">Hubungi admin WhatsApp</a>`;refreshPortfolio()}catch(e){$("shopMsg").textContent=e.message}}
+boot();
+</script></body></html>
